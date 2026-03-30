@@ -24,8 +24,3 @@ Ensure you have Python installed, then install the required MAVLink and DroneKit
 
 ```bash
 pip install -r requirements.txt
-
-Author
-Pradhyumna Avinash Ramgirwar
-M.Sc. Electrical Engineering and Information Technology (EEIT)
-Otto von Guericke University (OVGU) - Magdeburg
