@@ -1,17 +1,26 @@
-# Intelligent U-Space Traffic Control 🚁🚦
-**Automated Multi-UAV Deconfliction using MAVLink**
+# AeroGuard-IQ: Low-Level MAVLink Flight Controller Bypass
 
-## Overview
-This project serves as the command-and-control layer for high-density drone operations. While edge intelligence (like **AeroGuard-IQ**) handles individual drone survival, and long-range networks (like **Project Aether-Link**) maintain connectivity, this system acts as the centralized "Digital Air Traffic Controller."
+This repository contains the foundational SITL (Software In The Loop) communication layer for **AeroGuard-IQ**, an autonomous obstacle avoidance system for UAVs. 
 
-It uses **DroneKit** and **SITL** to simulate multiple UAVs sharing the same airspace, continuously monitoring telemetry to predict and prevent collisions.
+During the initial development and simulation phase, a critical API routing bug was identified within the standard DroneKit-Python library on Windows environments, which silently dropped high-level autonomous navigation commands. This script serves as a robust, low-level workaround using direct MAVLink channel injections to establish reliable flight control.
 
-## Key Features
-* **Multi-Agent Simulation:** Spawns and manages multiple virtual drones simultaneously.
-* **Real-Time Telemetry Monitoring:** Continuously parses GPS and altitude data from all active MAVLink streams.
-* **Automated Conflict Resolution:** Implements dynamic distance checking. If two drones breach the minimum safety radius (e.g., 5 meters), the system automatically commands the lower-priority UAV to brake or reroute.
+## The Engineering Problem
+When attempting to transition the ArduPilot SITL (Copter 3.3) into `GUIDED` mode via the standard `VehicleMode("GUIDED")` API wrapper, the command is silently rejected. Diagnostic wiretapping of the `STATUSTEXT` MAVLink packets revealed no internal EKF or pre-arm failures. 
 
-## Tech Stack
-* **Language:** Python
-* **Protocols:** MAVLink
-* **Simulation:** DroneKit-SITL, MAVProxy
+The root cause is a `pymavlink` library mismatch on Windows that fails to translate the string "GUIDED" into the correct MAVLink ENUM machine code, causing the flight controller to ignore the navigation request while remaining in `STABILIZE` mode.
+
+## The Solution: Raw Channel Injection
+Rather than relying on the broken high-level API for automated takeoff, `virtual_pilot.py` completely bypasses the autonomous mode wrappers. The script operates by:
+1. Connecting to the SITL telemetry stream with an extended patience timeout (bypassing barometer calibration lag).
+2. Forcing the EKF (Extended Kalman Filter) to authentically align by allowing standard hardware checks to run their course.
+3. Injecting factory RC calibration data directly into the drone's EEPROM to clear failsafes.
+4. **Hot-wiring the virtual RC channels (`v.channels.overrides`)** to arm the motors in manual `STABILIZE` mode and physically inject a 80% throttle command to achieve lift.
+
+This ensures a stable, verified connection to the flight controller, allowing the broader AeroGuard-IQ obstacle avoidance logic to be built on top of a reliable transport layer.
+
+## Prerequisites & Installation
+
+Ensure you have Python installed, then install the required MAVLink and DroneKit libraries:
+
+```bash
+pip install -r requirements.txt
