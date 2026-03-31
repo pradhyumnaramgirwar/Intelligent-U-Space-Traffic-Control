@@ -24,6 +24,15 @@ To simulate a true U-Space environment, the system was expanded to control a syn
 **The Solution: Filesystem Isolation**
 The `fleet_spawner.py` script was engineered using Python's `subprocess` and `os` modules to dynamically generate isolated workspace directories (`drone_1_data`, etc.) for each flight controller. This allows each drone to boot with its own independent, uncorrupted factory calibration. The `fleet_traffic_controller.py` then iterates across the sequential TCP ports (5760, 5770, 5780), aligns the fleet's EKFs in parallel, and injects synchronized MAVLink throttle overrides to achieve a simultaneous swarm takeoff.
 
+## Phase 3: The Telemetry Radar Matrix
+For an autonomous traffic control system to prevent collisions, it requires real-time state vectors for every aircraft in the airspace. 
+
+**The Engineering Challenge:**
+Polling telemetry from multiple asynchronous flight controllers can cause network bottlenecking and desynchronization. 
+
+**The Solution:**
+The `fleet_traffic_controller_v2.py` was upgraded to act as a centralized radar hub. Using a synchronized polling loop, the script continuously extracts the `global_relative_frame` (Latitude, Longitude, Altitude), `heading`, and `groundspeed` attributes from each drone via their individual TCP MAVLink streams. This raw data is formatted into a live terminal matrix, serving as the foundational sensory input for the upcoming AeroGuard-IQ avoidance algorithms.
+
 This ensures a stable, verified connection to the flight controller, allowing the broader U-Space Traffic Control algorithms to be built on top of a reliable transport layer.
 
 ## Prerequisites & Installation
