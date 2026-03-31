@@ -16,6 +16,14 @@ Rather than relying on the broken high-level API for automated takeoff, `virtual
 3. Injecting factory RC calibration data directly into the drone's EEPROM to clear failsafes.
 4. **Hot-wiring the virtual RC channels (`v.channels.overrides`)** to arm the motors in manual `STABILIZE` mode and physically inject an 80% throttle command to achieve lift.
 
+## Phase 2: Multi-Drone U-Space Architecture
+To simulate a true U-Space environment, the system was expanded to control a synchronized fleet. 
+
+**Architectural Challenge:** Booting multiple ArduPilot SITL instances in a single directory causes a fatal resource contention error. Drones "tug-of-war" over the same virtual EEPROM file, causing Drones 2 and N to fail their Compass and Accelerometer pre-arm checks because they cannot save their calibration data.
+
+**The Solution: Filesystem Isolation**
+The `fleet_spawner.py` script was engineered using Python's `subprocess` and `os` modules to dynamically generate isolated workspace directories (`drone_1_data`, etc.) for each flight controller. This allows each drone to boot with its own independent, uncorrupted factory calibration. The `fleet_traffic_controller.py` then iterates across the sequential TCP ports (5760, 5770, 5780), aligns the fleet's EKFs in parallel, and injects synchronized MAVLink throttle overrides to achieve a simultaneous swarm takeoff.
+
 This ensures a stable, verified connection to the flight controller, allowing the broader U-Space Traffic Control algorithms to be built on top of a reliable transport layer.
 
 ## Prerequisites & Installation
