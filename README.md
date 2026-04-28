@@ -1,43 +1,59 @@
-# Intelligent U-Space Traffic Control: Low-Level MAVLink Flight Controller Bypass
+Intelligent U-Space Traffic Control Architecture
+Intelligent U-Space Traffic Control Architecture is a comprehensive, distributed Software-In-The-Loop (SITL) simulation for autonomous UAV fleet management. Built from the ground up to bypass standard API limitations, this system utilizes direct MAVLink TCP injection, real-time asynchronous telemetry matrices, and a predictive Machine Learning layer to autonomously enforce safe Beyond Visual Line of Sight (BVLOS) airspace operations.
 
-This repository contains the foundational SITL (Software In The Loop) communication layer for the **Intelligent U-Space Traffic Control** project. 
+🚀 System Architecture & Development Phases
+Phase 1: Low-Level MAVLink API Bypass
+During initial development, a critical routing bug was identified in the standard DroneKit-Python library on Windows, which silently dropped high-level autonomous navigation commands (failing to translate "GUIDED" into the correct MAVLink ENUM machine code).
 
-During the initial development and simulation phase, a critical API routing bug was identified in the standard DroneKit-Python library on Windows, which silently dropped high-level autonomous navigation commands. This script serves as a robust, low-level workaround using direct MAVLink channel injections to establish reliable flight control and telemetry streaming.
+The Solution: Rather than relying on broken API wrappers, the system bypasses autonomous modes entirely. It forces authentic EKF (Extended Kalman Filter) alignment, injects factory RC calibration data directly into the virtual EEPROM, and uses direct MAVLink channel overrides to arm the motors and physically push throttle commands in manual STABILIZE mode.
 
-## The Engineering Problem
-When attempting to transition the ArduPilot SITL (Copter 3.3) into `GUIDED` mode via the standard `VehicleMode("GUIDED")` API wrapper, the command is silently rejected. Diagnostic wiretapping of the `STATUSTEXT` MAVLink packets revealed no internal EKF or pre-arm failures. 
+Phase 2: Filesystem Isolation & Swarm Deployment
+To simulate a true U-Space environment, the architecture was expanded to control a synchronized fleet of 3 drones.
 
-The root cause is a `pymavlink` library mismatch on Windows that fails to translate the string "GUIDED" into the correct MAVLink ENUM machine code, causing the flight controller to ignore the navigation request while remaining in `STABILIZE` mode.
+The Engineering Challenge: Booting multiple ArduPilot SITL instances in a single directory causes a fatal resource contention error. Drones "tug-of-war" over the same virtual EEPROM file, causing subsequent drones to fail their Compass and Accelerometer pre-arm checks.
 
-## The Solution: Raw Channel Injection
-Rather than relying on the broken high-level API for automated takeoff, `virtual_pilot.py` completely bypasses the autonomous mode wrappers. The script operates by:
-1. Connecting to the SITL telemetry stream with an extended patience timeout (bypassing barometer calibration lag).
-2. Forcing the EKF (Extended Kalman Filter) to authentically align by allowing standard hardware checks to run their course.
-3. Injecting factory RC calibration data directly into the drone's EEPROM to clear failsafes.
-4. **Hot-wiring the virtual RC channels (`v.channels.overrides`)** to arm the motors in manual `STABILIZE` mode and physically inject an 80% throttle command to achieve lift.
+The Solution: fleet_spawner.py uses Python's subprocess and os modules to dynamically generate isolated workspace directories for each flight controller. The control tower then iterates across sequential TCP ports (5760, 5770, 5780) to align the fleet's EKFs in parallel and inject synchronized MAVLink throttle overrides for a simultaneous swarm takeoff.
 
-## Phase 2: Multi-Drone U-Space Architecture
-To simulate a true U-Space environment, the system was expanded to control a synchronized fleet. 
+Phase 3: The Telemetry Radar Matrix
+For an autonomous traffic control system to prevent collisions, it requires real-time state vectors for every aircraft in the airspace without network bottlenecking.
 
-**Architectural Challenge:** Booting multiple ArduPilot SITL instances in a single directory causes a fatal resource contention error. Drones "tug-of-war" over the same virtual EEPROM file, causing Drones 2 and N to fail their Compass and Accelerometer pre-arm checks because they cannot save their calibration data.
+The Solution: The control script acts as a centralized radar hub. Using a synchronized polling loop, the system continuously extracts the global_relative_frame (Latitude, Longitude, Altitude) and groundspeed from each drone via their individual TCP MAVLink streams. This raw data is compiled into a live, low-latency terminal matrix, serving as the sensory input for the avoidance algorithms.
 
-**The Solution: Filesystem Isolation**
-The `fleet_spawner.py` script was engineered using Python's `subprocess` and `os` modules to dynamically generate isolated workspace directories (`drone_1_data`, etc.) for each flight controller. This allows each drone to boot with its own independent, uncorrupted factory calibration. The `fleet_traffic_controller.py` then iterates across the sequential TCP ports (5760, 5770, 5780), aligns the fleet's EKFs in parallel, and injects synchronized MAVLink throttle overrides to achieve a simultaneous swarm takeoff.
+Phase 4: Predictive AI & Autonomous Safety Overrides
+The final phase introduces a multi-layered autonomous safety system designed to prevent both physical collisions and communication link failures.
 
-## Phase 3: The Telemetry Radar Matrix
-For an autonomous traffic control system to prevent collisions, it requires real-time state vectors for every aircraft in the airspace. 
+Physical Safety (Geofencing & Proximity): The system calculates 3D spatial separation between dynamic swarm agents using Haversine trigonometry. If drones breach a strict 15-meter proximity limit or cross a static GPS geofence, the system executes a sub-second 0% throttle emergency override.
 
-**The Engineering Challenge:**
-Polling telemetry from multiple asynchronous flight controllers can cause network bottlenecking and desynchronization. 
+Predictive AI (Signal Integrity): A Random Forest Machine Learning model (scikit-learn) was trained on a 2,000-row synthetic dataset simulating drone flight parameters. The AI actively parses live telemetry (altitude, distance, urban interference) to predict dynamic Signal-to-Noise Ratio (SNR) degradation. If the model predicts an imminent communication failure (SNR < 45dB), it autonomously grounds the aircraft before the connection is actually lost.
 
-**The Solution:**
-The `fleet_traffic_controller_v2.py` was upgraded to act as a centralized radar hub. Using a synchronized polling loop, the script continuously extracts the `global_relative_frame` (Latitude, Longitude, Altitude), `heading`, and `groundspeed` attributes from each drone via their individual TCP MAVLink streams. This raw data is formatted into a live terminal matrix, serving as the foundational sensory input for the upcoming AeroGuard-IQ avoidance algorithms.
+💻 Installation & Usage
+Prerequisites
+Ensure you have Python installed, along with the required libraries:
 
-This ensures a stable, verified connection to the flight controller, allowing the broader U-Space Traffic Control algorithms to be built on top of a reliable transport layer.
+Bash
+pip install dronekit pymavlink pandas scikit-learn
+Running the Simulation
+Step 1: Spawn the Fleet
+Run the spawner to generate isolated ArduPilot SITL instances and boot the virtual flight controllers.
 
-## Prerequisites & Installation
+Bash
+python fleet_spawner.py
+Step 2: Initialize the Control Tower
+(Open a new terminal window). Run the final traffic controller script to connect to the fleet, load the Machine Learning model, and execute the autonomous flight protocol.
 
-Ensure you have Python installed, then install the required MAVLink and DroneKit libraries:
+Bash
+python fleet_traffic_controller_v5.py
+📂 Repository Structure
+fleet_spawner.py: Subprocess manager for generating isolated SITL nodes.
 
-```bash
-pip install -r requirements.txt
+fleet_traffic_controller_v1.py -> v4.py: Architectural stepping stones documenting the progression from single-drone bypass to multi-drone radar.
+
+fleet_traffic_controller_v5.py: The final production script featuring the complete ML predictive model and safety geofence.
+
+generate_dataset.py: Script to generate synthetic flight data.
+
+flight_data.csv: The 2,000-row dataset mapping altitude/distance to radio interference.
+
+train_ai.py: Script utilizing pandas and scikit-learn to train the regression model.
+
+aeroguard_brain.pkl: The serialized, pre-trained Random Forest AI model.
