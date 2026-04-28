@@ -1,3 +1,4 @@
 dronekit==2.9.2
 dronekit-sitl==3.3.0
-pymavlink==2.4.41
+mavproxy==1.8.74
+numpy==2.0.2
